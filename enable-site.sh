@@ -4,6 +4,7 @@
 
 free_port=-1
 start_port=60000
+sites=( "WP" "band" "admin" )
 
 #Gets the next available port and sets free_port
 get_port() {
@@ -25,10 +26,10 @@ get_port() {
 }
 
 #Creates the directory for a site and assigns the appropriate permissions
-#Params: $1 - path to folder to create
+#Params: $1 - path to folder to create, $2 - type of site (e.g. WP = WordPress, band = Band Admin, admin = Organisation Admin)
 create_site_directory(){
 	dir="$1"
-	sudo mkdir "$dir"
+	sudo cp -r "/var/www/master/$2" "$dir"
 	sudo chown www-data:www-data $dir
 	echo "created $dir"
 }
@@ -57,30 +58,46 @@ create_apache_site(){
 #Makes the magic happen - creates 3 sites for the given organisation
 #Params: $1 = full name, $2 = ID
 setup_site(){
-	echo "Creating WP site..."
-	id="$2_WP"
-	wp_dir="/var/www/$id"
-	create_site_directory "$wp_dir"
-	create_apache_site "$wp_dir" "$id"
-	echo "Created wp site at $wp_dir on port $free_port"
+	for site in "${sites[@]}"
+	do
+		echo "Creating $site site..."
+		id="$2_$site"
+		dir="/var/www/$id"
+		create_site_directory "$dir" "$site"
+		create_apache_site "$dir" "$id"
+		echo "Created $site site at $wp_dir on port $free_port"
+		echo ""
+	done
 
-	echo "Creating band site..."
-	id="$2_band"
-	band_dir="/var/www/$id"
-	create_site_directory "$band_dir"
-	create_apache_site "$band_dir" "$id"
-	echo "Created band site at $band_dir on port $free_port"
-
-	echo "Creating admin site..."
-	id="$2_admin"
-	admin_dir="/var/www/$id"
-	create_site_directory "$admin_dir"
-	create_apache_site "$admin_dir" "$id"
-	echo "Created admin site at $admin_dir on port $free_port"
-
+#	echo "Creating band site..."
+#	id="$2_band"
+#	band_dir="/var/www/$id"
+#	create_site_directory "$band_dir"
+#	create_apache_site "$band_dir" "$id"
+#	echo "Created band site at $band_dir on port $free_port"
+#
+#	echo "Creating admin site..."
+#	id="$2_admin"
+#	admin_dir="/var/www/$id"
+#	create_site_directory "$admin_dir"
+#	create_apache_site "$admin_dir" "$id"
+#	echo "Created admin site at $admin_dir on port $free_port"
+#
 
 	echo "Restarting Apache (adding sites)"
 	sudo systemctl restart apache2
+}
+
+#Writes completed sites to another file, in case this job gets interrupted
+#Params: $1 - name, $2 - id
+log_completed_site(){
+	echo -e "$1\n$2" | sudo tee -a "/var/www/.actioned-sites"
+}
+
+#Removes both this file and the temp completed sites
+remove_sites(){
+	sudo rm "/var/www/sites-required"
+	sudo rm "/var/www/.actioned-sites"
 }
 
 ############
@@ -102,7 +119,10 @@ do
 		echo "Found new organisation"
 		echo "$name ($id)"
 		setup_site "$name" "$id"
+		log_completed_site "$name" "$id"
 	else
 		name=$line
 	fi
 done < "/var/www/sites-required"
+
+remove_sites
