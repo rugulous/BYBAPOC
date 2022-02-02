@@ -1,10 +1,58 @@
 <?php
 
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require_once('../_lib/DB.php');
 
 if(isset($_POST['name']) && trim($_POST['name']) != '' && isset($_POST['id']) && trim($_POST['id']) != ''){
-    DB::executeQuery("INSERT INTO Organisation (Name, Identifier) VALUES (?, ?)", "ss", $_POST['name'], $_POST['id']);
-    file_put_contents('../sites-required', $_POST['name'] . "\n" . $_POST['id'] . "\n", FILE_APPEND);
+    //DB::executeQuery("INSERT INTO Organisation (Name, Identifier, CreatedDate) VALUES (?, ?, NOW())", "ss", $_POST['name'], $_POST['id']);
+    
+    //1. Create new database for organisation
+    $cpCon = DB::getConnection(DB::$DB_NONE);
+    DB::executeNonQueryWithCon($cpCon, "CREATE DATABASE " . mysqli_real_escape_string($cpCon, $_POST['id']));
+    
+    //2. Create new user for new database
+    $dbUser = $_POST['id'] . "_user";
+    $pass = md5(bin2hex(openssl_random_pseudo_bytes(8)));
+    echo "Creating user " . $dbUser . " with password '" . $pass . "' <br />";
+    
+    DB::executeNonQueryWithCon($cpCon, "CREATE USER '" . $dbUser . "'@'localhost' IDENTIFIED BY '" . $pass ."'");
+    
+    //3. Grant privileges on new database
+    DB::executeNonQueryWithCon($cpCon, "GRANT SELECT,INSERT,UPDATE,DELETE ON " . $_POST['id'] . ".* TO '" . $dbUser . "'@'localhost'");
+    DB::executeNonQueryWithCon($cpCon, "FLUSH PRIVILEGES");
+    
+    DB::closeConnection($cpCon);
+    
+    //4. List all tables
+    $masterCon = DB::getConnection("master");
+    $tables = DB::executeQueryWithCon($masterCon, "show tables");
+    DB::closeConnection($masterCon);
+    
+    //5. Create tables in new DB
+    $orgCon = DB::getConnection($_POST['id']);
+    
+    foreach($tables as $_table){
+        $table = array_values($_table)[0];
+        
+        echo "Copying {$table}...<br />";
+        
+        DB::executeNonQueryWithCon($orgCon, "CREATE TABLE " . $table . " LIKE master." . $table);
+    }
+    
+    DB::closeConnection($orgCon);
+    
+    //6. Create sites-required directory if not exists
+    if (!file_exists('../sites-required/')) {
+        mkdir('../sites-required/', 0777, true);
+    }
+    
+    //7. Create config file ready for bash to process
+    file_put_contents('../sites-required/' . $_POST['id'], "name='" . $_POST['name'] . "'\nid='" . $_POST['id']. "'\ndb_user='$dbUser'\ndb_pass='$pass'");
+    
+    //file_put_contents('../sites-required', $_POST['name'] . "\n" . $_POST['id'] . "\n" . $dbUser . "\n" . $pass . "\n", FILE_APPEND);
     header("Location: ?org=" . $_POST['name'] . "&success=1");
     
 } else if(isset($_GET['id_check']) && trim($_GET['id_check']) != ""){
