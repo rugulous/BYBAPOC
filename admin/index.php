@@ -1,9 +1,19 @@
 <?php
 
+require_once('../_lib/DB.php');
+
 if(isset($_POST['name']) && trim($_POST['name']) != '' && isset($_POST['id']) && trim($_POST['id']) != ''){
-    echo "adding organisation " . $_POST['name'] . " with ID " . $_POST['id'];
-    
+    DB::executeQuery("INSERT INTO Organisation (Name, Identifier) VALUES (?, ?)", "ss", $_POST['name'], $_POST['id']);
     file_put_contents('../sites-required', $_POST['name'] . "\n" . $_POST['id'] . "\n", FILE_APPEND);
+    header("Location: ?org=" . $_POST['name'] . "&success=1");
+    
+} else if(isset($_GET['id_check']) && trim($_GET['id_check']) != ""){
+    $result = DB::executeQuery("SELECT * FROM Organisation WHERE Identifier = ?", "s", $_GET['id_check']);
+    if(count($result) > 0){
+        die(false);
+    } else {
+        die(true);
+    }
 }
 
 ?>
@@ -38,7 +48,7 @@ if(isset($_POST['name']) && trim($_POST['name']) != '' && isset($_POST['id']) &&
                 </div>
 
                 <div class="text-center">
-                    <button type="submit" class="btn btn-lg btn-success">Create</button>
+                    <button type="submit" class="btn btn-lg btn-success" v-on:click="checkID">Create</button>
                 </div>
             </form>
         </div>
@@ -65,6 +75,23 @@ if(isset($_POST['name']) && trim($_POST['name']) != '' && isset($_POST['id']) &&
                         }
                     });
                     return ID.toUpperCase();
+                }
+            },
+            methods: {
+                checkID: function(e) {
+                    e.preventDefault();
+                    fetch("?id_check=" + this.orgID)
+                        .then(res => res.text())
+                        .then(t => {
+                            if (t == 1) {
+                                e.target.form.submit();
+                            } else {
+                                let id = document.getElementById("id");
+                                id.readOnly = false;
+                                id.setCustomValidity("This ID is already in use!");
+                                id.reportValidity();
+                            }
+                        });
                 }
             }
         });
