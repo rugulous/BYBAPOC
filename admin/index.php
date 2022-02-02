@@ -7,7 +7,7 @@ error_reporting(E_ALL);
 require_once('../_lib/DB.php');
 
 if(isset($_POST['name']) && trim($_POST['name']) != '' && isset($_POST['id']) && trim($_POST['id']) != ''){
-    //DB::executeQuery("INSERT INTO Organisation (Name, Identifier, CreatedDate) VALUES (?, ?, NOW())", "ss", $_POST['name'], $_POST['id']);
+    DB::executeQuery("INSERT INTO Organisation (Name, Identifier, CreatedDate) VALUES (?, ?, NOW())", "ss", $_POST['name'], $_POST['id']);
     
     //1. Create new database for organisation
     $cpCon = DB::getConnection(DB::$DB_NONE);
@@ -82,6 +82,10 @@ if(isset($_POST['name']) && trim($_POST['name']) != '' && isset($_POST['id']) &&
 <body>
     <div class="container" id="app">
         <h1 class="mb-3">Add New Organisation</h1>
+
+        <?php if(isset($_GET['success']) && isset($_GET['org'])){ ?>
+        <div class="alert alert-success text-center mb-3"><strong><?php echo $_GET['org'] ?></strong> added successfully. The sites are now being configured, and should be ready within the next 10 minutes.</div>
+        <?php } ?>
 
         <div class="card card-body">
             <form method="post">

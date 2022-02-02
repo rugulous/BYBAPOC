@@ -35,7 +35,7 @@ create_site_directory(){
 }
 
 #Creates a virtualhost and enables the site
-#Params: $1 - directory, $2 - ID
+#Params: $1 - directory, #2 - site ID
 create_apache_site(){
 	#copy template config file
 	conf_file="/etc/apache2/sites-available/$2.conf"
@@ -46,7 +46,8 @@ create_apache_site(){
 	sudo sed -i 's,##port##,'"$free_port"',' "$conf_file"
 	sudo sed -i 's,##directory##,'"$1"',' "$conf_file"
 	sudo sed -i 's,##id##,'"$2"',' "$conf_file"
-	#TODO: db access
+	sudo sed -i 's,##dbuser##,'"$db_user"',' "$conf_file"
+	sudo sed -i 's,##dbpass##,'"$db_pass"',' "$conf_file"
 
 	#tell Apache to listen on free port
 	echo "LISTEN $free_port" | sudo tee -a /etc/apache2/ports.conf
@@ -56,7 +57,7 @@ create_apache_site(){
 }
 
 #Makes the magic happen - creates 3 sites for the given organisation
-#Params: $1 = full name, $2 = ID
+#Params: $1 - site name, $2 - site ID, $3 - db user, $4 - db pass
 setup_site(){
 	for site in "${sites[@]}"
 	do
@@ -65,39 +66,12 @@ setup_site(){
 		dir="/var/www/$id"
 		create_site_directory "$dir" "$site"
 		create_apache_site "$dir" "$id"
-		echo "Created $site site at $wp_dir on port $free_port"
+		echo "Created $site site at $dir on port $free_port"
 		echo ""
 	done
 
-#	echo "Creating band site..."
-#	id="$2_band"
-#	band_dir="/var/www/$id"
-#	create_site_directory "$band_dir"
-#	create_apache_site "$band_dir" "$id"
-#	echo "Created band site at $band_dir on port $free_port"
-#
-#	echo "Creating admin site..."
-#	id="$2_admin"
-#	admin_dir="/var/www/$id"
-#	create_site_directory "$admin_dir"
-#	create_apache_site "$admin_dir" "$id"
-#	echo "Created admin site at $admin_dir on port $free_port"
-#
-
 	echo "Restarting Apache (adding sites)"
 	sudo systemctl restart apache2
-}
-
-#Writes completed sites to another file, in case this job gets interrupted
-#Params: $1 - name, $2 - id
-log_completed_site(){
-	echo -e "$1\n$2" | sudo tee -a "/var/www/.actioned-sites"
-}
-
-#Removes both this file and the temp completed sites
-remove_sites(){
-	sudo rm "/var/www/sites-required"
-	sudo rm "/var/www/.actioned-sites"
 }
 
 ############
@@ -105,24 +79,16 @@ remove_sites(){
 ############
 echo "Checking for sites..."
 
-#read the file line by line
-count=0
-
-name=""
-id=""
-
-while read -r line
+files="/var/www/sites-required/*"
+for f in $files
 do
-	let count+=1
-	if [ $(($count % 2)) -eq 0 ]; then
-		id=$line
-		echo "Found new organisation"
-		echo "$name ($id)"
-		setup_site "$name" "$id"
-		log_completed_site "$name" "$id"
-	else
-		name=$line
-	fi
-done < "/var/www/sites-required"
+	if [ -f "$f" ]; then
+		echo "$f"
+		source "$f"
+		echo "Processing site for $name..."
+		setup_site "$name" "$id" "$db_user" "$db_pass"
+		echo ""
 
-remove_sites
+		sudo rm "$f"
+	fi
+done
